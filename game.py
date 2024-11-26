@@ -11,11 +11,13 @@ WPM_AVG_CHARS = 4
 # Default test length
 WORD_COUNT = 25
 FONT_SIZE = 72
+SPOTLIGHT = 10
 
 CHARS = (
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    'abcdefghijklmnopqrstuvwxyz'
-    '1234567890!@#$%^&*()-=_+[]{}\\|;:\'",.<>/?'
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'        # Upper letters
+    'abcdefghijklmnopqrstuvwxyz'        # Lower letters
+    '1234567890'                        # Numbers
+    '!@#$%^&*()-=_+[]{}\\|;:\'",.<>/?'  # Punctuation
 )
 
 WORDS = [
@@ -174,31 +176,26 @@ class Game:
             'Press any key to exit', True, 'green')
 
         if test_type == 'ascii':
-            self.keys = ' '.join([self._get_key() for _ in range(words)])
+            self.keys = [self._get_key() for _ in range(words)]
         elif test_type == 'word':
             self.keys = ' '.join([self._get_word() for _ in range(words)])
         else:
             raise ValueError('invalid test type. must be one of: word, ascii')
 
-    def is_running(self) -> bool:
-        return self.running
-
     def tick(self):
         e = pygame.event.poll()
         if e:
-            if e.type == pygame.QUIT:
+            if (e.type == pygame.QUIT
+                        or (e.type == pygame.KEYDOWN and self.typed == len(self.keys))
+                        or (e.type == pygame.KEYDOWN and e.key == 27)
+                    ):
                 self.running = False
-                return
-            elif e.type == pygame.KEYDOWN and self.typed == len(self.keys):
-                self.running = False
-                return
-            elif e.type != pygame.TEXTINPUT:
                 return
 
             if self.started == 1:
                 self.started = pygame.time.get_ticks()
 
-            if e.text == self.keys[self.index]:
+            if e.type == pygame.TEXTINPUT and e.text == self.keys[self.index]:
                 self._next_key()
             else:
                 self.errors = self.errors + 1
@@ -208,19 +205,36 @@ class Game:
 
     def _render(self):
         self.screen.fill("black")
-        lh = self.font.render(''.join(self.keys[0:self.index]), True, 'gray')
-        c = self.font.render(
-            ''.join(self.keys[self.index:self.index+1]), True, 'black', 'gray')
-        rh = self.font.render(''.join(self.keys[self.index+1:]), True, 'gray')
-        acc = (1 - self.errors/max(1, (self.typed + self.errors))) * 100
-        cx = self.width / 2
-        cw = c.get_width()/2
-        lw = lh.get_width()+cw
 
-        y = self.height / 3 - self.font.get_height()/2
-        self.screen.blit(lh, (cx - lw - 5, y))
-        self.screen.blit(c, (cx - cw, y))
-        self.screen.blit(rh, (cx + cw + 5, y))
+        acc = (1 - self.errors/max(1, (self.typed + self.errors))) * 100
+
+        cy = self.height / 2 - self.font.get_height()/2
+        cw = self.font.get_height()
+
+        for i in range(-SPOTLIGHT, SPOTLIGHT):
+            if self.index + i < 0 or self.index + i >= len(self.keys):
+                continue
+
+            cx = self.width / 2 + cw/2 * i
+            c = int(255 * ((SPOTLIGHT - abs(i)) / SPOTLIGHT))
+
+            fg = pygame.Color(c, c, c, 255)
+            bg = 'black'
+
+            ch = self.font.render(
+                self.keys[self.index + i], True, fg, bg)
+            sw = ch.get_width() * (SPOTLIGHT - abs(i)) / SPOTLIGHT
+            sh = ch.get_height() * (SPOTLIGHT - abs(i)) / SPOTLIGHT
+
+            ch = pygame.transform.scale(ch, (sw, sh))
+
+            x = cx - ch.get_width()/2
+            y = cy - ch.get_height()/2
+            self.screen.blit(ch, (x, y))
+        uw = self.font.get_height()/2 + 10
+        underline = pygame.Rect(
+            self.width/2-uw/2, self.height/2 + self.font.get_height()/2, uw, 2)
+        pygame.draw.rect(self.screen, 'white', underline)
 
         if self.wpm > 0:
             wpm = self.menu_ft.render('WPM: {}, ACC: {}%'.format(
@@ -287,5 +301,7 @@ if __name__ == '__main__':
 
     game = Game(test_type, length)
 
-    while game.is_running():
+    while game.running:
         game.tick()
+
+    pygame.quit()
